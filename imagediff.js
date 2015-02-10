@@ -159,20 +159,76 @@
   function equalDimensions (a, b) {
     return equalHeight(a, b) && equalWidth(a, b);
   }
-  function equal (a, b, tolerance) {
 
-    var
-      aData     = a.data,
-      bData     = b.data,
-      length    = aData.length,
-      i;
 
-    tolerance = tolerance || 0;
+  function equalDetails(a, b, valueTolerance, pixelTolerance) {
+    var aData = a.data,
+        bData = b.data,
+        length = aData.length,
+        pixelToleranceAsPercent = false,
+        same = 0,
+        different = 0,
+        differingPixels = {},
+        differingValues = [],
+        combinedValueDifferences = 0,
+        maxValueDifference = 0;
 
-    if (!equalDimensions(a, b)) return false;
-    for (i = length; i--;) if (aData[i] !== bData[i] && Math.abs(aData[i] - bData[i]) > tolerance) return false;
+    valueTolerance = valueTolerance || 0;
+    pixelTolerance = pixelTolerance || 0;
 
-    return true;
+    if (!equalDimensions(a, b)) {
+      return { isEqual: false, reason: "Dimensions differ" };
+    }
+
+    if (pixelTolerance && pixelTolerance.match("\\%")) {
+      pixelToleranceAsPercent=true;
+      pixelTolerance = parseInt(pixelTolerance);
+    } else {
+      pixelTolerance = pixelTolerance * 4;
+    }
+
+    for (var i = length; i--;) {
+      var difference = Math.abs(aData[i] - bData[i]);
+      if (aData[i] !== bData[i] && difference > valueTolerance) {
+        differingValues.push([[aData[i], bData[i]]]);
+        combinedValueDifferences += difference;
+        if (difference > maxValueDifference) maxValueDifference = difference;
+        different ++;
+        var pixelNumber = Math.floor(i/4);
+        if (differingPixels[pixelNumber] != undefined) {
+          differingPixels[pixelNumber]++;
+        } else {
+          differingPixels[pixelNumber] = 1;
+        }
+      } else {
+        same ++;
+      }
+    }
+    var percentDifferent = Math.round(different/(different+same)*100);
+    var isEqual = true;
+    if (pixelToleranceAsPercent) {
+      isEqual = percentDifferent < pixelTolerance;
+    } else {
+      isEqual = different < pixelTolerance;
+    }
+
+    var averageDifference = different ? Math.round(combinedValueDifferences/different) : 0;
+    var pixelsDifferent = Object.keys(differingPixels).length;
+    var totalPixels = (same + different)/4;
+    return {
+      isEqual: isEqual,
+      description: pixelsDifferent + " pixels of " + totalPixels + " differ (" + percentDifferent + "%) with value differences of (max:" + maxValueDifference + ", average:" + averageDifference + ")",
+      differingPixels: pixelsDifferent,
+      averageValueDifference: averageDifference,
+      maxValueDifference: maxValueDifference,
+      totalPixels: totalPixels,
+      percentDifferent: percentDifferent,
+      differingValues: differingValues
+    };
+
+  }
+  function equal(a, b, colourTolerance, pixelTolerance) {
+    return equalDetails(a, b, colourTolerance, pixelTolerance);
   }
 
 
@@ -369,12 +425,17 @@
       if (isImageData(object)) { return copyImageData(object); }
       return toImageData(object);
     },
-
-    equal : function (a, b, tolerance) {
+    equalDetails: function (a, b, valueTolerance, pixelTolerance) {
       checkType(a, b);
       a = toImageData(a);
       b = toImageData(b);
-      return equal(a, b, tolerance);
+      return equalDetails(a, b, valueTolerance, pixelTolerance);
+    },
+    equal : function (a, b, valueTolerance, pixelTolerance) {
+      checkType(a, b);
+      a = toImageData(a);
+      b = toImageData(b);
+      return equal(a, b, valueTolerance, pixelTolerance);
     },
     diff : function (a, b, options) {
       checkType(a, b);
